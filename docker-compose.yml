@@ -1,0 +1,31 @@
+version: '3'
+
+services:
+
+  aggregator:
+    build: ./aggregator-module
+    ports:
+      - "8002:8002"
+    environment:
+      - USING_DOCKER_COMPOSE=1
+
+  delivery:
+    build: ./delivery-module
+    ports:
+      - "8003:8003"
+    environment:
+      - USING_DOCKER_COMPOSE=1
+
+  factory:
+    build: ./factory-module
+    ports: 
+      - "8001:8001"
+    environment:
+      - USING_DOCKER_COMPOSE=1
+    depends_on:
+      - aggregator
+      - delivery
+    restart: on-failure
+    links: 
+      - aggregator
+      - delivery
