@@ -26,20 +26,26 @@ class Delivery(Thread):
         super(Delivery, self).__init__(*args, **kwargs)
 
     def deliver(self):
-        object = deposit.get()
-        object['status'] = 'delivered'
+        if deposit.empty():
+            pass
+        else:
+            object = deposit.get()
+            object['status'] = 'delivered'
 
-        r = requests.post(
-            url='http://factory:8002/distribution',
-            json=object
-        )
+            r = requests.post(
+                url='http://aggregator:8002/aggregator/consumer',
+                json=object
+            )
 
-        print(f"Object : {object['object']}, Object_ID : {object['object_id']}, Status : {BCOLORS.OKGREEN}{object['status']}{BCOLORS.ENDC}")
+            print(f"Object : {object['object']}, Object_ID : {object['object_id']}, Status : {BCOLORS.OKGREEN}{object['status']}{BCOLORS.ENDC}")
 
 
     def run(self):
         while True:
-            self.deliver()
+            try:
+                self.deliver()
+            except requests.ConnectionError:
+                pass
             time.sleep(1)
 
 def run_delivery_module():

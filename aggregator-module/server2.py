@@ -13,33 +13,59 @@ log.setLevel(logging.ERROR)
 THREADS = 5
 
 app = Flask(__name__)
-deposit = queue.Queue()
+aggregator_producer = queue.Queue()
+aggregator_consumer = queue.Queue()
 
-@app.route('/deposit', methods=['POST'])
-def process_json():
-    deposit.put(json.loads(request.data))
+@app.route('/aggregator/producer', methods=['POST'])
+def producer():
+    aggregator_producer.put(json.loads(request.data))
     return {'status_code': 200}
 
-class Delivery(Thread):
-    def __init__(self, delivery_id, *args, **kwargs):
-        self.delivery_id = delivery_id
-        super(Delivery, self).__init__(*args, **kwargs)
+@app.route('/aggregator/consumer', methods=['POST'])
+def consumer():
+    aggregator_consumer.put(json.loads(request.data))
+    return {'status_code': 200}
+
+class Aggregator(Thread):
+    def __init__(self, aggregator_id, *args, **kwargs):
+        self.agreggator_id = aggregator_id
+        super(Aggregator, self).__init__(*args, **kwargs)
 
     def deliver(self):
-        object = deposit.get()
-        object['status'] = 'delivered'
 
-        r = requests.post(
-            url='http://factory:8002/distribution',
-            json=object
-        )
+        if aggregator_producer.empty():
+            pass
 
-        print(f"Object : {object['object']}, Object_ID : {object['object_id']}, Status : {BCOLORS.OKGREEN}{object['status']}{BCOLORS.ENDC}")
+        else:
+            object = aggregator_producer.get()
 
+            if object['package'] == 'packed':
+                r = requests.post(
+                    url='http://delivery:8003/deposit',
+                    json=object
+                )
+
+                print(f"Object : {object['object']}, Object_ID : {object['object_id']}, Package : {BCOLORS.WARNING}{object['package']}{BCOLORS.ENDC}")
+
+        if aggregator_consumer.empty():
+            pass
+
+        else:
+            object_deliver = aggregator_consumer.get()
+            if object_deliver['status'] == 'delivered':
+                r = requests.post(
+                    url='http://factory:8001/distribution',
+                    json=object_deliver
+                    )
+                
+                print(f"------------Delivery------------ : {object_deliver['object']}")
 
     def run(self):
         while True:
-            self.deliver()
+            try:
+                self.deliver()
+            except requests.ConnectionError as e:
+                print(e)
             time.sleep(1)
 
 def run_aggregator_module():
@@ -47,13 +73,13 @@ def run_aggregator_module():
 
     main_thread = Thread(target=lambda: app.run(
         host='0.0.0.0', 
-        port=8001))
+        port=8002))
     
     threads.append(main_thread)
 
     for i in range(1, THREADS + 1):
-        delivery = Delivery(i)
-        threads.append(delivery)
+        aggregator = Aggregator(i)
+        threads.append(aggregator)
     
     for i, thread in enumerate(threads):
         thread.start()
